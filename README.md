@@ -15,6 +15,10 @@ textade "viral clips" — en gratis, lokal motsvarighet till Klap.app/Opus Clip.
 4. **Klippning** — varje segment klipps ut med `ffmpeg`, beskärs till vertikalt
    9:16-format (1080x1920) och får ordvisa undertexter i TikTok/Shorts-stil inbrända
    (stor fet vit text med svart kontur, versaler, 3–4 ord i taget).
+5. **Ansiktstracking** — vid 9:16-beskärningen detekteras ansikten med OpenCV och
+   croppen centreras på det största/mest stabila ansiktet (en bra approximation av
+   den som pratar). Kameran ligger stilla så länge ansiktet är kvar i en dödzon och
+   panorerar mjukt när det flyttar sig. Hittas inga ansikten används centrerad crop.
 
 ## Installation
 
@@ -114,6 +118,7 @@ python ai_clipper.py "https://www.youtube.com/watch?v=VIDEO_ID" --heuristic --no
 | `--heuristic` | av | Använd alltid heuristiken, även om API-nyckel finns |
 | `--no-vertical` | av | Behåll originalformatet istället för 9:16-crop |
 | `--no-captions` | av | Bränn inte in undertexter |
+| `--no-face-track` | av | Stäng av ansiktstracking (fast centrerad crop) |
 
 ## Output
 
@@ -131,3 +136,8 @@ I outputmappen hamnar:
   (poddar, föreläsningar), men Claude är klart bättre på att hitta hooks och poänger.
 - Undertexterna genereras som en `.ass`-fil per klipp och bränns in med ffmpegs
   `subtitles`-filter; filen tas bort automatiskt när klippet är klart.
+- Ansiktstrackingen styr croppen via en `.cmd`-fil till ffmpegs `sendcmd`-filter
+  (tas också bort automatiskt). Saknas `opencv-python` hoppar verktyget över
+  trackingen med en varning och kör centrerad crop istället.
+- Utan API-nyckel siktar heuristiken på den övre delen av längdintervallet
+  (~50 s med default 20–60) — vill du ha kortare klipp, sänk `--max-len`.
