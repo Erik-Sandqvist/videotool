@@ -22,6 +22,14 @@ from pathlib import Path
 
 DEFAULT_CLAUDE_MODEL = "claude-sonnet-5"
 
+# utformat -> (aspekt bredd, aspekt hojd, utbredd, uthojd)
+FORMATS = {
+    "9:16": (9, 16, 1080, 1920),   # TikTok / Reels / Shorts
+    "4:5": (4, 5, 1080, 1350),     # Instagram portratt
+    "1:1": (1, 1, 1080, 1080),     # kvadrat
+    "16:9": (16, 9, 1920, 1080),   # landskap
+}
+
 
 # ---------------------------------------------------------------------------
 # Hjälpfunktioner
@@ -546,8 +554,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, Effect, Text
     return header + "\n".join(events) + "\n"
 
 
-def cut_clip(source, seg, index, out_dir, vertical, captions, words, src_w, src_h,
-             face_track=True):
+def cut_clip(source, seg, index, out_dir, out_format, captions, words,
+             src_w, src_h, face_track=True):
     """Klipper ut ett segment med ffmpeg. Kör med cwd=out_dir så att
     subtitles/sendcmd-filtren kan använda relativa sökvägar (undviker problem
     med enhetsbokstav/kolon i ffmpeg-filtersyntax på Windows)."""
@@ -556,22 +564,26 @@ def cut_clip(source, seg, index, out_dir, vertical, captions, words, src_w, src_
     duration = seg["end"] - seg["start"]
     temp_files = []
 
+    if out_format == "original":
+        out_w, out_h = src_w, src_h
+    else:
+        ar_w, ar_h, out_w, out_h = FORMATS[out_format]
+
     ass_name = None
     if captions:
         clip_words = [w for w in words
                       if seg["start"] - 0.05 <= w["start"] < seg["end"]]
         if clip_words:
             ass_name = base + ".ass"
-            play_w, play_h = (1080, 1920) if vertical else (src_w, src_h)
-            content = build_ass(clip_words, seg["start"], duration, play_w, play_h)
+            content = build_ass(clip_words, seg["start"], duration, out_w, out_h)
             (out_dir / ass_name).write_text(content, encoding="utf-8")
             temp_files.append(ass_name)
 
     filters = []
-    if vertical:
-        crop_w = int(src_h * 9 / 16) // 2 * 2
+    if out_format != "original":
+        crop_w = int(src_h * ar_w / ar_h) // 2 * 2
         if crop_w < src_w:
-            # Bredare an 9:16: beskär i sidled - följ ansikten om möjligt
+            # Bredare an malformatet: beskär i sidled - följ ansikten om möjligt
             x_pos = (src_w - crop_w) // 2
             if face_track:
                 samples = analyze_faces(source, seg, src_w, src_h)
@@ -585,11 +597,11 @@ def cut_clip(source, seg, index, out_dir, vertical, captions, words, src_w, src_
                 else:
                     print(f"   (inga ansikten i klipp {index} - centrerad crop)")
             filters.append(f"crop=w={crop_w}:h={src_h}:x={x_pos}:y=0")
-        elif src_w * 16 < src_h * 9:
-            # Smalare an 9:16: beskär höjden istället (centrerat)
-            crop_h = int(src_w * 16 / 9) // 2 * 2
+        elif src_w * ar_h < src_h * ar_w:
+            # Smalare an malformatet: beskär höjden istället (centrerat)
+            crop_h = int(src_w * ar_h / ar_w) // 2 * 2
             filters.append(f"crop=w={src_w}:h={crop_h}:x=0:y={(src_h - crop_h) // 2}")
-        filters.append("scale=1080:1920")
+        filters.append(f"scale={out_w}:{out_h}")
     if ass_name:
         filters.append(f"subtitles={ass_name}")
 
@@ -654,8 +666,12 @@ def parse_args(argv=None):
                         help=f"Claude-modell for segmentval (default: {DEFAULT_CLAUDE_MODEL})")
     parser.add_argument("--heuristic", action="store_true",
                         help="hoppa over AI och anvand alltid heuristiken")
+    parser.add_argument("--format", default="9:16",
+                        choices=list(FORMATS) + ["original"],
+                        help="utformat: 9:16 (Reels/Shorts), 4:5, 1:1, 16:9 "
+                             "eller original (default: 9:16)")
     parser.add_argument("--no-vertical", action="store_true",
-                        help="behall originalformatet istallet for 9:16")
+                        help="(deprecerad) samma som --format original")
     parser.add_argument("--no-captions", action="store_true",
                         help="branna inte in undertexter")
     parser.add_argument("--no-face-track", action="store_true",
@@ -734,18 +750,19 @@ def main(argv=None):
               f"\"{seg['title']}\"{extra}")
 
     # Steg 4: klippning
-    if args.no_vertical:
+    out_format = "original" if args.no_vertical else args.format
+    if out_format == "original":
         fmt = "originalformat"
     elif args.no_face_track:
-        fmt = "vertikalt 9:16 (centrerad crop)"
+        fmt = f"{out_format} (centrerad crop)"
     else:
-        fmt = "vertikalt 9:16 med ansiktstracking"
+        fmt = f"{out_format} med ansiktstracking"
     cap = "utan undertexter" if args.no_captions else "med inbrända undertexter"
     print(f"[4/4] Klipper {len(clips)} klipp, {fmt}, {cap} ...")
     created = []
     for i, seg in enumerate(clips, 1):
         name = cut_clip(source, seg, i, out_dir,
-                        vertical=not args.no_vertical,
+                        out_format=out_format,
                         captions=not args.no_captions,
                         words=words, src_w=src_w, src_h=src_h,
                         face_track=not args.no_face_track)

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ai-clipper-web",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["webapp.py"],
+      "port": 8765
+    }
+  ]
+}

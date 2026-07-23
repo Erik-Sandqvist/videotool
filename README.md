@@ -12,9 +12,10 @@ textade "viral clips" — en gratis, lokal motsvarighet till Klap.app/Opus Clip.
    virala klipp (hooks, poänger, känslomässiga toppar, konkreta tips). Utan API-nyckel
    (eller om AI-anropet failar) används en gratis heuristik som rangordnar tidsfönster
    efter taltäthet och sprider klippen över videon.
-4. **Klippning** — varje segment klipps ut med `ffmpeg`, beskärs till vertikalt
-   9:16-format (1080x1920) och får ordvisa undertexter i TikTok/Shorts-stil inbrända
-   (stor fet vit text med svart kontur, versaler, 3–4 ord i taget).
+4. **Klippning** — varje segment klipps ut med `ffmpeg`, beskärs till valt format
+   (default vertikalt 9:16, 1080x1920 — även 4:5, 1:1, 16:9 och original stöds) och
+   får ordvisa undertexter i TikTok/Shorts-stil inbrända (stor fet vit text med
+   svart kontur, versaler, 3–4 ord i taget).
 5. **Ansiktstracking** — vid 9:16-beskärningen detekteras ansikten med OpenCV och
    croppen centreras på det största/mest stabila ansiktet (en bra approximation av
    den som pratar). Kameran ligger stilla så länge ansiktet är kvar i en dödzon och
@@ -77,14 +78,32 @@ I bash/zsh:
 export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
-## Användning
+## Webbgränssnitt
+
+```powershell
+python webapp.py
+```
+
+Öppna sedan **http://127.0.0.1:8765** i webbläsaren. Där kan du:
+
+- klistra in en YouTube-länk och ställa in alla alternativ i ett formulär
+- följa nedladdning/transkribering/klippning i en live-logg
+- förhandsgranska klippen direkt i sidan och ladda ner dem
+- avbryta ett pågående jobb
+
+Sidan visar också om `ANTHROPIC_API_KEY` och ffmpeg hittas i serverns miljö
+(sätt nyckeln i terminalen *innan* du startar `webapp.py`). Ett jobb körs i
+taget, och varje jobb får en egen mapp under `webjobs/`.
+
+## Användning (CLI)
 
 ```
 python ai_clipper.py <url> [--clips N] [--min-len S] [--max-len S] [--out MAPP]
                       [--whisper-model tiny|base|small|medium|large-v3]
                       [--device cpu|cuda] [--compute-type TYP]
                       [--model CLAUDE_MODELL] [--heuristic]
-                      [--no-vertical] [--no-captions]
+                      [--format 9:16|4:5|1:1|16:9|original]
+                      [--no-captions] [--no-face-track]
 ```
 
 ### Exempel
@@ -99,8 +118,11 @@ python ai_clipper.py "https://www.youtube.com/watch?v=VIDEO_ID" --clips 5 --min-
 # Snabbare transkribering med GPU och större modell
 python ai_clipper.py "https://www.youtube.com/watch?v=VIDEO_ID" --whisper-model medium --device cuda --compute-type float16
 
+# Kvadratiska klipp för Instagram-flödet
+python ai_clipper.py "https://www.youtube.com/watch?v=VIDEO_ID" --format 1:1
+
 # Hoppa över AI:n (ingen API-kostnad) och behåll originalformatet utan text
-python ai_clipper.py "https://www.youtube.com/watch?v=VIDEO_ID" --heuristic --no-vertical --no-captions
+python ai_clipper.py "https://www.youtube.com/watch?v=VIDEO_ID" --heuristic --format original --no-captions
 ```
 
 ### Flaggor
@@ -115,8 +137,9 @@ python ai_clipper.py "https://www.youtube.com/watch?v=VIDEO_ID" --heuristic --no
 | `--device` | `cpu` | `cpu` eller `cuda` |
 | `--compute-type` | `int8` | faster-whisper compute type, t.ex. `int8`, `float16` |
 | `--model` | `claude-sonnet-5` | Claude-modell för segmentvalet |
+| `--format` | `9:16` | Utformat: `9:16`, `4:5`, `1:1`, `16:9` eller `original` |
 | `--heuristic` | av | Använd alltid heuristiken, även om API-nyckel finns |
-| `--no-vertical` | av | Behåll originalformatet istället för 9:16-crop |
+| `--no-vertical` | av | (deprecerad) samma som `--format original` |
 | `--no-captions` | av | Bränn inte in undertexter |
 | `--no-face-track` | av | Stäng av ansiktstracking (fast centrerad crop) |
 
